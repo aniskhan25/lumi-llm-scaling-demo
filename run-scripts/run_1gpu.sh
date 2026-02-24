@@ -1,12 +1,13 @@
 #!/bin/bash
-#SBATCH -J lora-1gpu
-#SBATCH -p small-g
-#SBATCH -N 1
+#SBATCH --job-name=lora-1gpu
+#SBATCH --account=project_462000131
+#SBATCH --partition=small-g
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-task=7
-#SBATCH -t 00:20:00
-#SBATCH -o logs/slurm-%x-%j.out
+#SBATCH --time=00:20:00
+#SBATCH --output=logs/slurm-%x-%j.out
 
 set -euo pipefail
 

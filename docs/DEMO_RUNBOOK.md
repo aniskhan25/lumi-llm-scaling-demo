@@ -45,7 +45,7 @@ bash run-scripts/watch_rocm_smi.sh logs/rocm_smi_live.log
 Terminal B (launch 4-GPU live training):
 
 ```bash
-sbatch -A <project_id> run-scripts/run_4gpu.sh
+sbatch run-scripts/run_4gpu.sh
 squeue -u $USER
 ```
 
@@ -121,4 +121,3 @@ Presenter cue: compare same prompts; show improved domain language and policy gr
 - `bf16` on MI250X enables practical throughput with stable memory.
 - Data and logging instrumentation make optimization measurable, not anecdotal.
 - Profiling/tuning support from AIF shortens iteration time for production deployment.
-
