@@ -1,0 +1,34 @@
+name: qwen25_7b_lora_demo
+base_model: Qwen/Qwen2.5-7B-Instruct
+dataset_path: data/demo_support_subset.sample.jsonl
+output_dir: artifacts/adapters/adapter_live
+
+seed: 42
+max_steps: 150
+max_length: 1024
+learning_rate: 2e-4
+weight_decay: 0.01
+warmup_steps: 20
+max_grad_norm: 1.0
+
+micro_batch_size: 2
+grad_accum: 8
+num_workers: 2
+
+logging_steps: 5
+save_steps: 50
+warmup_log_steps: 20
+steady_state_window: 30
+
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
