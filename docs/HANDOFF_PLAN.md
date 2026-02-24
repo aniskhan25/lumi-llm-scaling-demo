@@ -5,7 +5,7 @@
 ## Dev A: Environment + launch
 
 - Validate module + container stack from `docs/ENVIRONMENT.md`.
-- Confirm `run-scripts/run_1gpu.sh`, `run-scripts/run_4gpu.sh`, and `run-scripts/run_2node_8gpu.sbatch` execute on target partition.
+- Confirm `run-scripts/run_1gpu.sh`, `run-scripts/run_4gpu.sh`, and `run-scripts/run_2node_8gpu.sh` execute on target partition.
 - Deliverables:
   - Verified SLURM logs in `logs/`
   - Finalized account/partition settings

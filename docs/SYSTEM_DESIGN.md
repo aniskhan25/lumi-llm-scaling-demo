@@ -54,7 +54,7 @@ scripts/
 run-scripts/
   run_1gpu.sh
   run_4gpu.sh
-  run_2node_8gpu.sbatch
+  run_2node_8gpu.sh
   watch_rocm_smi.sh
 docs/
   ENVIRONMENT.md
@@ -149,7 +149,7 @@ Output artifacts:
 
 - `run_1gpu.sh`: 1 node x 1 GPU, 80 steps, baseline throughput
 - `run_4gpu.sh`: 1 node x 4 GPUs, 150 steps, main live demo
-- `run_2node_8gpu.sbatch`: 2 nodes x 4 GPUs/node, 200 steps, precomputed scaling
+- `run_2node_8gpu.sh`: 2 nodes x 4 GPUs/node, 200 steps, precomputed scaling
 
 ## 10) Acceptance checks
 

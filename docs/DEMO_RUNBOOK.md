@@ -45,6 +45,8 @@ bash run-scripts/watch_rocm_smi.sh logs/rocm_smi_live.log
 Terminal B (launch 4-GPU live training):
 
 ```bash
+# Optional: override writable output location (defaults to SLURM submit dir)
+# export RUN_ROOT=/scratch/<project>/<user>/lumi-demo-runs
 sbatch run-scripts/run_4gpu.sh
 squeue -u $USER
 ```
@@ -52,7 +54,7 @@ squeue -u $USER
 Tail logs after job starts:
 
 ```bash
-tail -f logs/train_4gpu_rank0.jsonl
+tail -f "${RUN_ROOT:-$PWD}/logs/train_4gpu_rank0.jsonl"
 ```
 
 Expected within ~30-60s:

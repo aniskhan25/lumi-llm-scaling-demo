@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=lora-4gpu
+#SBATCH --job-name=lora-8gpu-2n
 #SBATCH --account=project_462000131
 #SBATCH --partition=small-g
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=28
-#SBATCH --time=00:25:00
+#SBATCH --time=00:30:00
 #SBATCH --output=slurm-%x-%j.out
 
 set -euo pipefail
@@ -32,25 +32,44 @@ export OMP_NUM_THREADS=${OMP_NUM_THREADS:-7}
 export HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-0,1,2,3}
 export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 export TORCH_DISTRIBUTED_DEBUG=${TORCH_DISTRIBUTED_DEBUG:-DETAIL}
+export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-hsn0,hsn1,hsn2,hsn3}
+export FI_PROVIDER=${FI_PROVIDER:-cxi}
+export FI_CXI_DEFAULT_CQ_SIZE=${FI_CXI_DEFAULT_CQ_SIZE:-131072}
+
+export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n1)
+export MASTER_PORT=${MASTER_PORT:-29500}
+export NNODES=${SLURM_NNODES}
+export GPUS_PER_NODE=4
 
 echo "start_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "host=$(hostname)"
-echo "world_size=4"
-echo "slurm_job_id=${SLURM_JOB_ID:-none}"
-echo "hip_visible_devices=$HIP_VISIBLE_DEVICES"
+echo "nodes=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | tr '\n' ' ')"
+echo "master_addr=$MASTER_ADDR"
+echo "master_port=$MASTER_PORT"
+echo "world_size=$((NNODES * GPUS_PER_NODE))"
 echo "code_root=$CODE_ROOT"
 echo "run_root=$RUN_ROOT"
 echo "log_dir=$LOG_DIR"
 echo "artifacts_dir=$ARTIFACTS_DIR"
 
-singularity run "$SIF_IMAGE" bash -lc '
+srun --ntasks="$SLURM_NNODES" --ntasks-per-node=1 bash -lc '
 set -euo pipefail
-cd "$CODE_ROOT"
-source "$VENV_ACTIVATE"
+echo "node_rank=${SLURM_NODEID} host=$(hostname)"
 
-torchrun --standalone --nproc_per_node=4 "$CODE_ROOT/scripts/train_lora_ddp.py" \
-  --config "$CODE_ROOT/configs/train_lora_demo.yaml" \
-  --max_steps 150 \
-  --log_file "$LOG_DIR/train_4gpu_rank0.jsonl" \
-  --output_dir "$ARTIFACTS_DIR/adapters/adapter_live_4gpu"
+singularity run "$SIF_IMAGE" bash -lc "
+set -euo pipefail
+cd \"$CODE_ROOT\"
+source \"$VENV_ACTIVATE\"
+
+torchrun \
+  --nnodes=$NNODES \
+  --nproc_per_node=$GPUS_PER_NODE \
+  --node_rank=$SLURM_NODEID \
+  --master_addr=$MASTER_ADDR \
+  --master_port=$MASTER_PORT \
+  \"$CODE_ROOT/scripts/train_lora_ddp.py\" \
+    --config \"$CODE_ROOT/configs/train_lora_demo.yaml\" \
+    --max_steps 200 \
+    --log_file \"$LOG_DIR/train_8gpu_rank0.jsonl\" \
+    --output_dir \"$ARTIFACTS_DIR/adapters/adapter_live_8gpu\"
+"
 '
