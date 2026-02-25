@@ -11,7 +11,33 @@
 
 set -euo pipefail
 
-CODE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${CODE_ROOT:-}" ]]; then
+  CODE_ROOT="$CODE_ROOT"
+elif [[ -n "${SLURM_SUBMIT_DIR:-}" && -f "${SLURM_SUBMIT_DIR}/scripts/train_lora_ddp.py" ]]; then
+  CODE_ROOT="$SLURM_SUBMIT_DIR"
+elif [[ -f "$SCRIPT_DIR/../scripts/train_lora_ddp.py" ]]; then
+  CODE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+  echo "ERROR: Could not determine CODE_ROOT." >&2
+  echo "Set CODE_ROOT to your repo path before sbatch." >&2
+  exit 1
+fi
+
+DEFAULT_SCRATCH_VENV="/scratch/project_462000131/${USER:-anisrahm}/venvs/myvenv/bin/activate"
+if [[ -z "${VENV_ACTIVATE:-}" ]]; then
+  if [[ -f "$DEFAULT_SCRATCH_VENV" ]]; then
+    VENV_ACTIVATE="$DEFAULT_SCRATCH_VENV"
+  else
+    VENV_ACTIVATE="$CODE_ROOT/.venv/bin/activate"
+  fi
+fi
+if [[ ! -f "$VENV_ACTIVATE" ]]; then
+  echo "ERROR: VENV activate script not found: $VENV_ACTIVATE" >&2
+  echo "Set VENV_ACTIVATE=/scratch/project_462000131/anisrahm/venvs/myvenv/bin/activate" >&2
+  exit 1
+fi
+
 RUN_ROOT="${RUN_ROOT:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if ! mkdir -p "$RUN_ROOT" 2>/dev/null; then
   RUN_ROOT="/tmp/${USER:-${LOGNAME:-user}}/lumi-llm-scaling-demo/${SLURM_JOB_ID:-manual}"
@@ -22,7 +48,7 @@ ARTIFACTS_DIR="${ARTIFACTS_DIR:-$RUN_ROOT/artifacts}"
 mkdir -p "$LOG_DIR" "$ARTIFACTS_DIR/adapters"
 
 export CODE_ROOT RUN_ROOT LOG_DIR ARTIFACTS_DIR
-export VENV_ACTIVATE="${VENV_ACTIVATE:-$CODE_ROOT/.venv/bin/activate}"
+export VENV_ACTIVATE
 
 module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings

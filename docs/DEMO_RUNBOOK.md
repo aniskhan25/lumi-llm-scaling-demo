@@ -14,6 +14,7 @@ cd /path/to/lumi-llm-scaling-demo
 module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
 export SIF_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260124_092648/lumi-multitorch-full-u24r64f21m43t29-20260124_092648.sif
+export VENV_ACTIVATE=/scratch/project_462000131/anisrahm/venvs/myvenv/bin/activate
 
 singularity run "$SIF_IMAGE" python -c "import torch; print(torch.__version__, torch.cuda.device_count())"
 ```
