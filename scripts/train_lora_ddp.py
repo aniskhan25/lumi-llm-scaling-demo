@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 import datetime as dt
 import json
 import os
@@ -382,13 +383,19 @@ def main() -> None:
 
         tokens_accum_local += int(batch["attention_mask"].sum().item())
 
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-            outputs = model(
-                input_ids=batch["input_ids"],
-                attention_mask=batch["attention_mask"],
-                labels=batch["labels"],
-            )
-            loss = outputs.loss / args.grad_accum
+        is_sync_step = (accum_idx + 1) == args.grad_accum
+        ddp_sync_context = nullcontext()
+        if info.is_distributed and isinstance(model, DDP) and not is_sync_step:
+            ddp_sync_context = model.no_sync()
+
+        with ddp_sync_context:
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                outputs = model(
+                    input_ids=batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    labels=batch["labels"],
+                )
+                loss = outputs.loss / args.grad_accum
 
         loss.backward()
         accum_idx += 1
