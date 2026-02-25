@@ -231,6 +231,41 @@ def all_reduce_sum(value: torch.Tensor, info: DistInfo) -> torch.Tensor:
     return value
 
 
+def validate_loader_nonempty(
+    info: DistInfo,
+    device: torch.device,
+    loader_len: int,
+    dataset_len: int,
+    micro_batch_size: int,
+) -> None:
+    if info.is_distributed:
+        len_tensor = torch.tensor([loader_len], device=device, dtype=torch.int64)
+        min_tensor = len_tensor.clone()
+        max_tensor = len_tensor.clone()
+        dist.all_reduce(min_tensor, op=dist.ReduceOp.MIN)
+        dist.all_reduce(max_tensor, op=dist.ReduceOp.MAX)
+        min_len = int(min_tensor.item())
+        max_len = int(max_tensor.item())
+    else:
+        min_len = loader_len
+        max_len = loader_len
+
+    if min_len == 0:
+        raise RuntimeError(
+            "DataLoader has zero batches on at least one rank. "
+            f"dataset_size={dataset_len}, world_size={info.world_size}, "
+            f"micro_batch_size={micro_batch_size}. "
+            "Use a larger dataset or smaller micro_batch_size (e.g. 1)."
+        )
+
+    if info.rank == 0 and min_len != max_len:
+        print(
+            f"warning: loader length differs across ranks (min={min_len}, max={max_len}); "
+            "this may cause collective desynchronization.",
+            flush=True,
+        )
+
+
 def main() -> None:
     args = parse_args()
     set_seed(args.seed)
@@ -267,7 +302,14 @@ def main() -> None:
         num_workers=args.num_workers,
         pin_memory=True,
         collate_fn=collate_fn,
-        drop_last=True,
+        drop_last=False,
+    )
+    validate_loader_nonempty(
+        info=info,
+        device=device,
+        loader_len=len(loader),
+        dataset_len=len(dataset),
+        micro_batch_size=args.micro_batch_size,
     )
 
     model = AutoModelForCausalLM.from_pretrained(
