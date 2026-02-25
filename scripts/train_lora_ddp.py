@@ -104,21 +104,38 @@ def set_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
+def utc_now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def init_distributed() -> DistInfo:
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
         rank = int(os.environ["RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        dist.init_process_group(backend="nccl", timeout=dt.timedelta(minutes=30))
         torch.cuda.set_device(local_rank)
+        init_kwargs = {"backend": "nccl", "timeout": dt.timedelta(minutes=30)}
+        try:
+            dist.init_process_group(**init_kwargs, device_id=torch.device("cuda", local_rank))
+        except TypeError:
+            dist.init_process_group(**init_kwargs)
         return DistInfo(True, rank, local_rank, world_size)
     torch.cuda.set_device(0)
     return DistInfo(False, 0, 0, 1)
 
 
+def distributed_barrier(info: DistInfo) -> None:
+    if not info.is_distributed or not dist.is_initialized():
+        return
+    try:
+        dist.barrier(device_ids=[info.local_rank])
+    except TypeError:
+        dist.barrier()
+
+
 def cleanup_distributed(info: DistInfo) -> None:
     if info.is_distributed and dist.is_initialized():
-        dist.barrier()
+        distributed_barrier(info)
         dist.destroy_process_group()
 
 
@@ -233,7 +250,7 @@ def main() -> None:
             log_path.unlink()
 
     if info.is_distributed:
-        dist.barrier()
+        distributed_barrier(info)
 
     tokenizer = AutoTokenizer.from_pretrained(args.base_model, trust_remote_code=args.trust_remote_code)
     if tokenizer.pad_token is None:
@@ -255,7 +272,7 @@ def main() -> None:
 
     model = AutoModelForCausalLM.from_pretrained(
         args.base_model,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         trust_remote_code=args.trust_remote_code,
     )
     model.config.use_cache = False
@@ -292,7 +309,7 @@ def main() -> None:
             log_path,
             {
                 "event": "run_start",
-                "time": dt.datetime.utcnow().isoformat() + "Z",
+                "time": utc_now_iso(),
                 "rank": info.rank,
                 "world_size": info.world_size,
                 "base_model": args.base_model,
@@ -361,7 +378,7 @@ def main() -> None:
         if info.rank == 0 and (global_step % args.logging_steps == 0 or global_step == 1):
             payload = {
                 "event": "step",
-                "time": dt.datetime.utcnow().isoformat() + "Z",
+                "time": utc_now_iso(),
                 "step": global_step,
                 "world_size": info.world_size,
                 "loss": round(loss_value, 6),
@@ -389,7 +406,7 @@ def main() -> None:
 
         summary = {
             "event": "run_summary",
-            "time": dt.datetime.utcnow().isoformat() + "Z",
+            "time": utc_now_iso(),
             "world_size": info.world_size,
             "steps": global_step,
             "avg_step_time_s": round(avg_step, 6),
