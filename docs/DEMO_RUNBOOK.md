@@ -25,7 +25,7 @@ Expected: Torch version prints and GPU count > 0 in allocated job.
 
 ```bash
 singularity run "$SIF_IMAGE" bash -lc '
-source .venv/bin/activate
+source "$VENV_ACTIVATE"
 python scripts/infer_before_after.py \
   --base_model Qwen/Qwen2.5-7B-Instruct \
   --prompts_file prompts/demo_prompts.jsonl \
@@ -50,6 +50,12 @@ Terminal B (launch 4-GPU live training):
 # export RUN_ROOT=/scratch/<project>/<user>/lumi-demo-runs
 sbatch run-scripts/run_4gpu.sh
 squeue -u $USER
+```
+
+Optional 8-GPU (2-node) precompute run:
+
+```bash
+sbatch --time=00:45:00 --export=ALL,MAX_STEPS=120 run-scripts/run_2node_8gpu.sh
 ```
 
 Tail logs after job starts:
@@ -85,7 +91,7 @@ Presenter cue: explain speedup and efficiency, then link to AIF optimization rol
 
 ```bash
 singularity run "$SIF_IMAGE" bash -lc '
-source .venv/bin/activate
+source "$VENV_ACTIVATE"
 python scripts/infer_before_after.py \
   --base_model Qwen/Qwen2.5-7B-Instruct \
   --adapter_path artifacts/adapters/adapter_demo \

@@ -67,18 +67,23 @@ export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n1)
 export MASTER_PORT=${MASTER_PORT:-29500}
 export NNODES=${SLURM_NNODES}
 export GPUS_PER_NODE=4
+export MAX_STEPS=${MAX_STEPS:-120}
+export TRAIN_CONFIG=${TRAIN_CONFIG:-$CODE_ROOT/configs/train_lora_demo.yaml}
+export PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-1}
 
 echo "start_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "nodes=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | tr '\n' ' ')"
 echo "master_addr=$MASTER_ADDR"
 echo "master_port=$MASTER_PORT"
 echo "world_size=$((NNODES * GPUS_PER_NODE))"
+echo "max_steps=$MAX_STEPS"
+echo "train_config=$TRAIN_CONFIG"
 echo "code_root=$CODE_ROOT"
 echo "run_root=$RUN_ROOT"
 echo "log_dir=$LOG_DIR"
 echo "artifacts_dir=$ARTIFACTS_DIR"
 
-srun --ntasks="$SLURM_NNODES" --ntasks-per-node=1 bash -lc '
+srun --kill-on-bad-exit=1 --ntasks="$SLURM_NNODES" --ntasks-per-node=1 bash -lc '
 set -euo pipefail
 echo "node_rank=${SLURM_NODEID} host=$(hostname)"
 
@@ -94,8 +99,8 @@ torchrun \
   --master_addr=$MASTER_ADDR \
   --master_port=$MASTER_PORT \
   \"$CODE_ROOT/scripts/train_lora_ddp.py\" \
-    --config \"$CODE_ROOT/configs/train_lora_demo.yaml\" \
-    --max_steps 200 \
+    --config \"$TRAIN_CONFIG\" \
+    --max_steps \"$MAX_STEPS\" \
     --log_file \"$LOG_DIR/train_8gpu_rank0.jsonl\" \
     --output_dir \"$ARTIFACTS_DIR/adapters/adapter_live_8gpu\"
 "
