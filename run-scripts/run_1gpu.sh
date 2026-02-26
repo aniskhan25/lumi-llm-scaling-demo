@@ -59,12 +59,16 @@ export HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-0}
 export NCCL_DEBUG=${NCCL_DEBUG:-ERROR}
 export TORCH_DISTRIBUTED_DEBUG=${TORCH_DISTRIBUTED_DEBUG:-OFF}
 export HF_HUB_DISABLE_PROGRESS_BARS=${HF_HUB_DISABLE_PROGRESS_BARS:-1}
+export MAX_STEPS=${MAX_STEPS:-80}
+export TRAIN_CONFIG=${TRAIN_CONFIG:-$CODE_ROOT/configs/train_lora_demo.yaml}
 
 echo "start_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "host=$(hostname)"
 echo "world_size=1"
 echo "slurm_job_id=${SLURM_JOB_ID:-none}"
 echo "hip_visible_devices=$HIP_VISIBLE_DEVICES"
+echo "max_steps=$MAX_STEPS"
+echo "train_config=$TRAIN_CONFIG"
 echo "code_root=$CODE_ROOT"
 echo "run_root=$RUN_ROOT"
 echo "log_dir=$LOG_DIR"
@@ -76,8 +80,8 @@ cd "$CODE_ROOT"
 source "$VENV_ACTIVATE"
 
 python "$CODE_ROOT/scripts/train_lora_ddp.py" \
-  --config "$CODE_ROOT/configs/train_lora_demo.yaml" \
-  --max_steps 80 \
+  --config "$TRAIN_CONFIG" \
+  --max_steps "$MAX_STEPS" \
   --log_file "$LOG_DIR/train_1gpu_rank0.jsonl" \
   --output_dir "$ARTIFACTS_DIR/adapters/adapter_live_1gpu"
 '

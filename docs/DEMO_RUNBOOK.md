@@ -4,8 +4,16 @@
 
 1. Provision environment from [ENVIRONMENT.md](ENVIRONMENT.md).
 2. Pre-train and store `adapter_demo` under `artifacts/adapters/adapter_demo`.
-3. Generate and save scaling artifacts in `artifacts/`.
-4. Capture fallback screenshots and a short recording.
+3. Build larger scaling dataset:
+   ```bash
+   python scripts/build_scaling_dataset.py \
+     --input data/demo_support_subset.sample.jsonl \
+     --output data/demo_support_subset.scaling_5000.jsonl \
+     --size 5000 \
+     --seed 42
+   ```
+4. Generate and save scaling artifacts in `artifacts/`.
+5. Capture fallback screenshots and a short recording.
 
 ## 1) Session start checks (T-5 min)
 
@@ -48,14 +56,20 @@ Terminal B (launch 4-GPU live training):
 ```bash
 # Optional: override writable output location (defaults to SLURM submit dir)
 # export RUN_ROOT=/scratch/<project>/<user>/lumi-demo-runs
-sbatch run-scripts/run_4gpu.sh
+sbatch --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_4gpu.sh
 squeue -u $USER
+```
+
+1-GPU baseline run (precompute, same config/steps):
+
+```bash
+sbatch --time=00:45:00 --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_1gpu.sh
 ```
 
 Optional 8-GPU (2-node) precompute run:
 
 ```bash
-sbatch --time=00:45:00 --export=ALL,MAX_STEPS=120 run-scripts/run_2node_8gpu.sh
+sbatch --time=00:55:00 --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_2node_8gpu.sh
 ```
 
 Tail logs after job starts:

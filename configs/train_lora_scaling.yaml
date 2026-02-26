@@ -1,0 +1,34 @@
+name: qwen25_7b_lora_scaling
+base_model: Qwen/Qwen2.5-7B-Instruct
+dataset_path: data/demo_support_subset.scaling_5000.jsonl
+output_dir: artifacts/adapters/adapter_live_scaling
+
+seed: 42
+max_steps: 140
+max_length: 1024
+learning_rate: 2e-4
+weight_decay: 0.01
+warmup_steps: 30
+max_grad_norm: 1.0
+
+micro_batch_size: 2
+grad_accum: 8
+num_workers: 2
+
+logging_steps: 5
+save_steps: 70
+warmup_log_steps: 30
+steady_state_window: 60
+
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
