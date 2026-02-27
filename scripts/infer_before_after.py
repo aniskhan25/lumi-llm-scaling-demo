@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import time
 from pathlib import Path
@@ -62,6 +63,48 @@ def row_to_messages(row: Dict[str, Any]) -> List[Dict[str, str]]:
     return [{"role": "user", "content": prompt}]
 
 
+def resolve_adapter_path(adapter_path: str | None) -> str | None:
+    if not adapter_path:
+        return None
+
+    raw = adapter_path.strip()
+    p = Path(raw).expanduser()
+    candidates: List[Path] = [p]
+
+    if not p.is_absolute():
+        candidates.append(Path.cwd() / p)
+        candidates.append(Path(__file__).resolve().parent.parent / p)
+        for env_var in ("CODE_ROOT", "PROJECT_ROOT", "SLURM_SUBMIT_DIR"):
+            env_val = os.environ.get(env_var)
+            if env_val:
+                candidates.append(Path(env_val).expanduser() / p)
+
+    deduped: List[Path] = []
+    seen = set()
+    for c in candidates:
+        c = c.resolve()
+        if str(c) not in seen:
+            seen.add(str(c))
+            deduped.append(c)
+
+    for c in deduped:
+        if (c / "adapter_config.json").is_file():
+            return str(c)
+
+    # Path-like inputs should fail fast with a clear local-path error.
+    if raw.startswith((".", "~", "/")) or os.sep in raw:
+        tried = "\n".join(str(c) for c in deduped)
+        raise FileNotFoundError(
+            "Adapter path does not contain adapter_config.json.\n"
+            f"Input: {raw}\n"
+            f"Tried:\n{tried}\n"
+            "Expected a PEFT adapter directory like '<path>/adapter_config.json'."
+        )
+
+    # Non path-like input may be an HF repo id; let PEFT resolve it.
+    return raw
+
+
 def main() -> None:
     args = parse_args()
     set_seed(args.seed)
@@ -80,8 +123,10 @@ def main() -> None:
         trust_remote_code=args.trust_remote_code,
     )
 
-    if args.adapter_path:
-        model = PeftModel.from_pretrained(model, args.adapter_path)
+    resolved_adapter_path = resolve_adapter_path(args.adapter_path)
+    if resolved_adapter_path:
+        print(f"Loading adapter from: {resolved_adapter_path}")
+        model = PeftModel.from_pretrained(model, resolved_adapter_path)
 
     model = model.to("cuda")
     model.eval()

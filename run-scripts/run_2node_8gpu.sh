@@ -24,17 +24,17 @@ else
   exit 1
 fi
 
-DEFAULT_SCRATCH_VENV="/scratch/project_462000131/${USER:-anisrahm}/venvs/myvenv/bin/activate"
+DEFAULT_PROJECT_VENV="/project/project_462000131/${USER:-anisrahm}/venvs/myvenv/bin/activate"
 if [[ -z "${VENV_ACTIVATE:-}" ]]; then
-  if [[ -f "$DEFAULT_SCRATCH_VENV" ]]; then
-    VENV_ACTIVATE="$DEFAULT_SCRATCH_VENV"
+  if [[ -f "$DEFAULT_PROJECT_VENV" ]]; then
+    VENV_ACTIVATE="$DEFAULT_PROJECT_VENV"
   else
     VENV_ACTIVATE="$CODE_ROOT/.venv/bin/activate"
   fi
 fi
 if [[ ! -f "$VENV_ACTIVATE" ]]; then
   echo "ERROR: VENV activate script not found: $VENV_ACTIVATE" >&2
-  echo "Set VENV_ACTIVATE=/scratch/project_462000131/anisrahm/venvs/myvenv/bin/activate" >&2
+  echo "Set VENV_ACTIVATE=/project/project_462000131/anisrahm/venvs/myvenv/bin/activate" >&2
   exit 1
 fi
 

@@ -17,10 +17,14 @@ module load lumi-aif-singularity-bindings
 
 # Recommended default from current LUMI AI docs (Jan 2026 refresh)
 export SIF_IMAGE="${SIF_IMAGE:-/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260124_092648/lumi-multitorch-full-u24r64f21m43t29-20260124_092648.sif}"
+export VENV_ACTIVATE=/project/project_462000131/anisrahm/venvs/myvenv/bin/activate
 
-# Quick sanity checks
-singularity run "$SIF_IMAGE" python -c "import torch; print('torch', torch.__version__); print('cuda', torch.version.cuda); print('gpus', torch.cuda.device_count())"
-singularity run "$SIF_IMAGE" python -c "import torch; print('nccl available', torch.distributed.is_nccl_available())"
+# Quick sanity checks (inside a GPU allocation)
+srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc '
+source "$VENV_ACTIVATE"
+python -c "import torch; print(\"torch\", torch.__version__); print(\"cuda\", torch.version.cuda); print(\"gpus\", torch.cuda.device_count())"
+python -c "import torch; print(\"nccl available\", torch.distributed.is_nccl_available())"
+'
 ```
 
 If the exact path changes on your system, find current images:
@@ -36,6 +40,7 @@ export PROJECT_ROOT=/path/to/lumi-llm-scaling-demo
 export DATA_DIR=$PROJECT_ROOT/data
 export OUTPUT_DIR=$PROJECT_ROOT/artifacts
 export HF_HOME=/scratch/$PROJECT/hf-cache
+export VENV_ACTIVATE=/project/project_462000131/anisrahm/venvs/myvenv/bin/activate
 mkdir -p "$HF_HOME" "$OUTPUT_DIR" "$PROJECT_ROOT/logs"
 ```
 
@@ -87,6 +92,42 @@ export FI_CXI_DEFAULT_CQ_SIZE=131072
 - `rocm-smi` shows all allocated GPUs.
 - 10-step smoke test (1 GPU) finishes without OOM.
 - 50-step smoke test (4 GPUs) shows throughput increase.
+
+## Troubleshooting: broken venv python launcher
+
+If you see an error like:
+
+`.../venvs/myvenv/bin/python: line XX: .../venvs/myvenv/bin/python: Argument list too long`
+
+the venv was likely created from a wrapper and its `bin/python` now calls itself.
+
+Recreate the venv from inside the container using a real Python binary:
+
+```bash
+export PROJECT_ROOT=/scratch/project_462000131/anisrahm/lumi-llm-scaling-demo
+export VENV_ROOT=/project/project_462000131/anisrahm/venvs/myvenv
+
+module use /appl/local/laifs/modules
+module load lumi-aif-singularity-bindings
+export SIF_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260124_092648/lumi-multitorch-full-u24r64f21m43t29-20260124_092648.sif
+
+singularity run "$SIF_IMAGE" bash -lc '
+set -euo pipefail
+python -m venv --clear "$VENV_ROOT"
+source "$VENV_ROOT/bin/activate"
+pip install --upgrade pip
+pip install -r "$PROJECT_ROOT/requirements.txt"
+python -c "import sys; print(sys.executable)"
+'
+```
+
+Sanity check:
+
+```bash
+file /project/project_462000131/anisrahm/venvs/myvenv/bin/python
+```
+
+It should resolve to a real executable/symlink, not a recursive shell wrapper.
 
 ## Source references
 

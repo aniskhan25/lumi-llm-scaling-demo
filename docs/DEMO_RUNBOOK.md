@@ -22,9 +22,12 @@ cd /path/to/lumi-llm-scaling-demo
 module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
 export SIF_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260124_092648/lumi-multitorch-full-u24r64f21m43t29-20260124_092648.sif
-export VENV_ACTIVATE=/scratch/project_462000131/anisrahm/venvs/myvenv/bin/activate
+export VENV_ACTIVATE=/project/project_462000131/anisrahm/venvs/myvenv/bin/activate
 
-singularity run "$SIF_IMAGE" python -c "import torch; print(torch.__version__, torch.cuda.device_count())"
+srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc '
+source "$VENV_ACTIVATE"
+python -c "import torch; print(torch.__version__, torch.cuda.device_count())"
+'
 ```
 
 Expected: Torch version prints and GPU count > 0 in allocated job.
@@ -32,7 +35,7 @@ Expected: Torch version prints and GPU count > 0 in allocated job.
 ## 2) Before inference (1-2 min)
 
 ```bash
-singularity run "$SIF_IMAGE" bash -lc '
+srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc '
 source "$VENV_ACTIVATE"
 python scripts/infer_before_after.py \
   --base_model Qwen/Qwen2.5-7B-Instruct \
@@ -103,8 +106,14 @@ Presenter cue: explain speedup and efficiency, then link to AIF optimization rol
 
 ## 5) After inference (1-2 min)
 
+Confirm adapter exists:
+
 ```bash
-singularity run "$SIF_IMAGE" bash -lc '
+test -f artifacts/adapters/adapter_demo/adapter_config.json
+```
+
+```bash
+srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc '
 source "$VENV_ACTIVATE"
 python scripts/infer_before_after.py \
   --base_model Qwen/Qwen2.5-7B-Instruct \
@@ -120,7 +129,7 @@ Presenter cue: compare same prompts; show improved domain language and policy gr
 
 - ROCm/GPU visibility:
   - `rocm-smi`
-  - `python -c "import torch; print(torch.cuda.device_count())"`
+  - `srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc 'source "$VENV_ACTIVATE"; python -c "import torch; print(torch.cuda.device_count())"'`
 - Slow model load:
   - ensure model cached under `HF_HOME` on scratch
   - reduce model to `Qwen/Qwen2.5-3B-Instruct`
