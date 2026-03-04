@@ -1,38 +1,107 @@
-# Demo Runbook (8-10 minutes)
+# Demo Runbook (Simple + Reproducible)
 
-## 0) One-time prep (before event day)
+## Demo modes
 
-1. Provision environment from [ENVIRONMENT.md](ENVIRONMENT.md).
-2. Pre-train and store `adapter_demo` under `artifacts/adapters/adapter_demo`.
-3. Build larger scaling dataset:
-   ```bash
-   python scripts/build_scaling_dataset.py \
-     --input data/demo_support_subset.sample.jsonl \
-     --output data/demo_support_subset.scaling_5000.jsonl \
-     --size 5000 \
-     --seed 42
-   ```
-4. Generate and save scaling artifacts in `artifacts/`.
-5. Capture fallback screenshots and a short recording.
+- **Mode A (recommended):** precomputed 1/4/8 scaling + live 4-GPU run + optional before/after inference.
+- **Mode B (safe fallback):** precomputed scaling + precomputed before/after outputs only.
+- **Mode C (semi-live async):** submit with `sbatch`, poll status, then show generated outputs when done.
 
-## 1) Session start checks (T-5 min)
+## 0) Fixed paths/env
 
 ```bash
-cd /path/to/lumi-llm-scaling-demo
+cd /scratch/project_462000131/$USER/lumi-llm-scaling-demo
 module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
-export SIF_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260124_092648/lumi-multitorch-full-u24r64f21m43t29-20260124_092648.sif
-export VENV_ACTIVATE=/project/project_462000131/anisrahm/venvs/myvenv/bin/activate
 
+export SIF_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260124_092648/lumi-multitorch-full-u24r64f21m43t29-20260124_092648.sif
+export VENV_ACTIVATE=/project/project_462000131/$USER/venvs/myvenv/bin/activate
+```
+
+GPU sanity check (inside allocation):
+
+```bash
 srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc '
 source "$VENV_ACTIVATE"
 python -c "import torch; print(torch.__version__, torch.cuda.device_count())"
 '
 ```
 
-Expected: Torch version prints and GPU count > 0 in allocated job.
+## 1) One-time precompute
 
-## 2) Before inference (1-2 min)
+Build scaling dataset:
+
+```bash
+python scripts/build_scaling_dataset.py \
+  --input data/demo_support_subset.sample.jsonl \
+  --output data/demo_support_subset.scaling_5000.jsonl \
+  --size 5000 \
+  --seed 42
+```
+
+Run scaling jobs:
+
+```bash
+sbatch --time=00:45:00 --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_1gpu.sh
+sbatch --time=00:55:00 --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_4gpu.sh
+sbatch --time=00:55:00 --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_2node_8gpu.sh
+```
+
+Generate final scaling artifacts:
+
+```bash
+python scripts/parse_logs.py \
+  --inputs logs/train_1gpu_rank0.jsonl logs/train_4gpu_rank0.jsonl logs/train_8gpu_rank0.jsonl \
+  --output_dir artifacts \
+  --warmup_steps 30
+```
+
+Expected artifacts:
+
+- `artifacts/scaling_summary.md`
+- `artifacts/scaling_summary.csv`
+- `artifacts/scaling_plot.png`
+
+## 2) Live demo flow (Mode A)
+
+### Terminal 1: submit live 4-GPU run
+
+```bash
+sbatch --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_4gpu.sh
+squeue -u $USER
+```
+
+### Terminal 2: monitor rocm-smi on the same running job
+
+```bash
+JOBID=<jobid_from_sbatch>
+NODE=$(squeue -j "$JOBID" -h -o %N)
+
+srun --overlap --jobid="$JOBID" -w "$NODE" --ntasks=1 \
+  bash run-scripts/watch_rocm_smi.sh logs/rocm_smi_live.log 1
+```
+
+### Terminal 1: tail training log
+
+```bash
+tail -f logs/train_4gpu_rank0.jsonl
+```
+
+What to point out:
+
+- `world_size=4`
+- recurring step logs with `step_time_s` and `tokens_per_s`
+- GPU activity visible from `rocm-smi`
+
+### Show precomputed scaling result
+
+Open and present:
+
+- `artifacts/scaling_summary.md`
+- `artifacts/scaling_plot.png`
+
+## 3) Optional quality demo (before/after inference)
+
+Before:
 
 ```bash
 srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc '
@@ -44,75 +113,11 @@ python scripts/infer_before_after.py \
 '
 ```
 
-Presenter cue: point out generic answers and weaker policy specificity.
-
-## 3) Live distributed run (2-3 min)
-
-Terminal A (monitoring):
-
-```bash
-bash run-scripts/watch_rocm_smi.sh logs/rocm_smi_live.log
-```
-
-Terminal B (launch 4-GPU live training):
-
-```bash
-# Optional: override writable output location (defaults to SLURM submit dir)
-# export RUN_ROOT=/scratch/<project>/<user>/lumi-demo-runs
-sbatch --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_4gpu.sh
-squeue -u $USER
-```
-
-1-GPU baseline run (precompute, same config/steps):
-
-```bash
-sbatch --time=00:45:00 --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_1gpu.sh
-```
-
-Optional 8-GPU (2-node) precompute run:
-
-```bash
-sbatch --time=00:55:00 --export=ALL,TRAIN_CONFIG=configs/train_lora_scaling.yaml,MAX_STEPS=140 run-scripts/run_2node_8gpu.sh
-```
-
-Tail logs after job starts:
-
-```bash
-tail -f "${RUN_ROOT:-$PWD}/logs/train_4gpu_rank0.jsonl"
-```
-
-Expected within ~30-60s:
-
-- DDP init line with `world_size=4`
-- Step logs every 5 steps
-- `tokens_per_s` stabilizing after warmup
-- `rocm-smi` shows activity on 4 GPUs
-
-## 4) Scaling proof (1-2 min)
-
-```bash
-python scripts/parse_logs.py \
-  --inputs logs/train_1gpu_rank0.jsonl logs/train_4gpu_rank0.jsonl logs/train_8gpu_rank0.jsonl \
-  --output_dir artifacts \
-  --warmup_steps 20
-```
-
-Show:
-
-- `artifacts/scaling_summary.md`
-- `artifacts/scaling_plot.png`
-
-Presenter cue: explain speedup and efficiency, then link to AIF optimization role.
-
-## 5) After inference (1-2 min)
-
-Confirm adapter exists:
+After (adapter must exist):
 
 ```bash
 test -f artifacts/adapters/adapter_demo/adapter_config.json
-```
 
-```bash
 srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc '
 source "$VENV_ACTIVATE"
 python scripts/infer_before_after.py \
@@ -123,33 +128,15 @@ python scripts/infer_before_after.py \
 '
 ```
 
-Presenter cue: compare same prompts; show improved domain language and policy grounding.
+## 4) Fallback ladder
 
-## 6) Troubleshooting quick checks
+1. Full live (Mode A): live 4-GPU + live `rocm-smi` + precomputed scaling.
+2. Semi-live (Mode C): submit job live, show queue/start, then show precomputed outputs.
+3. Offline (Mode B): precomputed logs/plots + precomputed before/after outputs.
 
-- ROCm/GPU visibility:
-  - `rocm-smi`
-  - `srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc 'source "$VENV_ACTIVATE"; python -c "import torch; print(torch.cuda.device_count())"'`
-- Slow model load:
-  - ensure model cached under `HF_HOME` on scratch
-  - reduce model to `Qwen/Qwen2.5-3B-Instruct`
-- DDP init hang:
-  - verify `MASTER_ADDR`, `MASTER_PORT`, `NCCL_SOCKET_IFNAME`
-  - verify same container/module stack across nodes
-- OOM:
-  - lower `--max_length`
-  - lower `--micro_batch_size`
-  - increase `--grad_accum`
+## 5) Fast troubleshooting
 
-## 7) Fallback ladder
-
-1. Full live: 4-GPU training + live `rocm-smi` + live before/after
-2. Semi-live: live inference + precomputed scaling logs/plots
-3. Offline: recorded clip + static outputs/screenshots
-
-## 8) Suggested speaking points for AIF value
-
-- Parallel strategy tuning (`1 -> 4 -> 8` GPUs) improves latency-to-result.
-- `bf16` on MI250X enables practical throughput with stable memory.
-- Data and logging instrumentation make optimization measurable, not anecdotal.
-- Profiling/tuning support from AIF shortens iteration time for production deployment.
+- No GPUs visible: run commands with `srun --ntasks=1 --gpus=1 ...`.
+- `amdgpu not found`: you are likely on login node; monitor through `srun --jobid ...` on compute node.
+- `adapter_config.json` missing: wrong adapter path or adapter not prepared.
+- Timeouts: reduce `MAX_STEPS` or increase `--time` in `sbatch`.

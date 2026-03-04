@@ -24,7 +24,7 @@ else
   exit 1
 fi
 
-DEFAULT_PROJECT_VENV="/project/project_462000131/${USER:-anisrahm}/venvs/myvenv/bin/activate"
+DEFAULT_PROJECT_VENV="/project/project_462000131/$USER/venvs/myvenv/bin/activate"
 if [[ -z "${VENV_ACTIVATE:-}" ]]; then
   if [[ -f "$DEFAULT_PROJECT_VENV" ]]; then
     VENV_ACTIVATE="$DEFAULT_PROJECT_VENV"
@@ -34,13 +34,13 @@ if [[ -z "${VENV_ACTIVATE:-}" ]]; then
 fi
 if [[ ! -f "$VENV_ACTIVATE" ]]; then
   echo "ERROR: VENV activate script not found: $VENV_ACTIVATE" >&2
-  echo "Set VENV_ACTIVATE=/project/project_462000131/anisrahm/venvs/myvenv/bin/activate" >&2
+  echo "Set VENV_ACTIVATE=/project/project_462000131/$USER/venvs/myvenv/bin/activate" >&2
   exit 1
 fi
 
 RUN_ROOT="${RUN_ROOT:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if ! mkdir -p "$RUN_ROOT" 2>/dev/null; then
-  RUN_ROOT="/tmp/${USER:-${LOGNAME:-user}}/lumi-llm-scaling-demo/${SLURM_JOB_ID:-manual}"
+  RUN_ROOT="/tmp/$USER/lumi-llm-scaling-demo/${SLURM_JOB_ID:-manual}"
   mkdir -p "$RUN_ROOT"
 fi
 LOG_DIR="${LOG_DIR:-$RUN_ROOT/logs}"

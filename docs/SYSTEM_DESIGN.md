@@ -139,7 +139,7 @@ Output artifacts:
 
 ## 8) Operational defaults for demo reliability
 
-- Pre-cache model on scratch before event.
+- Pre-cache model on scratch before runs.
 - Keep live run short (150 steps).
 - Prefer 4-GPU single-node live run.
 - Keep 8-GPU numbers precomputed unless network is already rehearsed.
@@ -157,4 +157,3 @@ Output artifacts:
 - `rocm-smi` shows non-zero GPU activity on target GPUs.
 - Prompt outputs clearly differ before/after using `adapter_demo`.
 - Scaling summary shows monotonic throughput improvement from 1 -> 4 -> 8.
-

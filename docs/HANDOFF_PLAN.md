@@ -30,7 +30,7 @@
 
 - Curate production-safe support/policy subset in `data/`.
 - Own `scripts/infer_before_after.py` and `prompts/demo_prompts.jsonl`.
-- Produce `adapter_demo` from pre-event run.
+- Produce `adapter_demo` from a prepared baseline run.
 - Deliverables:
   - `artifacts/before_outputs.jsonl`
   - `artifacts/after_outputs.jsonl`
@@ -51,4 +51,3 @@
 - [ ] Live 4-GPU run reaches logging within 30-60s from launch.
 - [ ] Scaling artifacts generated from real LUMI logs (not synthetic).
 - [ ] Fallback ladder validated end-to-end.
-

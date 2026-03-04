@@ -7,6 +7,17 @@
 - Distributed backend: `nccl` (RCCL on ROCm)
 - Precision: `bf16`
 
+## Minimal setup (copy/paste)
+
+```bash
+cd /scratch/project_462000131/$USER/lumi-llm-scaling-demo
+module use /appl/local/laifs/modules
+module load lumi-aif-singularity-bindings
+
+export SIF_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260124_092648/lumi-multitorch-full-u24r64f21m43t29-20260124_092648.sif
+export VENV_ACTIVATE=/project/project_462000131/$USER/venvs/myvenv/bin/activate
+```
+
 ## Container and module baseline
 
 Use the AI Factory modules and one tested multi-framework container.
@@ -17,7 +28,7 @@ module load lumi-aif-singularity-bindings
 
 # Recommended default from current LUMI AI docs (Jan 2026 refresh)
 export SIF_IMAGE="${SIF_IMAGE:-/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260124_092648/lumi-multitorch-full-u24r64f21m43t29-20260124_092648.sif}"
-export VENV_ACTIVATE=/project/project_462000131/anisrahm/venvs/myvenv/bin/activate
+export VENV_ACTIVATE=/project/project_462000131/$USER/venvs/myvenv/bin/activate
 
 # Quick sanity checks (inside a GPU allocation)
 srun --ntasks=1 --gpus=1 singularity exec "$SIF_IMAGE" bash -lc '
@@ -40,7 +51,7 @@ export PROJECT_ROOT=/path/to/lumi-llm-scaling-demo
 export DATA_DIR=$PROJECT_ROOT/data
 export OUTPUT_DIR=$PROJECT_ROOT/artifacts
 export HF_HOME=/scratch/$PROJECT/hf-cache
-export VENV_ACTIVATE=/project/project_462000131/anisrahm/venvs/myvenv/bin/activate
+export VENV_ACTIVATE=/project/project_462000131/$USER/venvs/myvenv/bin/activate
 mkdir -p "$HF_HOME" "$OUTPUT_DIR" "$PROJECT_ROOT/logs"
 ```
 
@@ -50,7 +61,7 @@ Create a per-project venv mounted in writable storage and install only add-ons n
 
 ```bash
 singularity run "$SIF_IMAGE" bash -lc '
-python -m venv .venv
+python -m venv --system-site-packages .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -104,8 +115,8 @@ the venv was likely created from a wrapper and its `bin/python` now calls itself
 Recreate the venv from inside the container using a real Python binary:
 
 ```bash
-export PROJECT_ROOT=/scratch/project_462000131/anisrahm/lumi-llm-scaling-demo
-export VENV_ROOT=/project/project_462000131/anisrahm/venvs/myvenv
+export PROJECT_ROOT=/scratch/project_462000131/$USER/lumi-llm-scaling-demo
+export VENV_ROOT=/project/project_462000131/$USER/venvs/myvenv
 
 module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
@@ -113,7 +124,7 @@ export SIF_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20
 
 singularity run "$SIF_IMAGE" bash -lc '
 set -euo pipefail
-python -m venv --clear "$VENV_ROOT"
+python -m venv --system-site-packages --clear "$VENV_ROOT"
 source "$VENV_ROOT/bin/activate"
 pip install --upgrade pip
 pip install -r "$PROJECT_ROOT/requirements.txt"
@@ -124,7 +135,7 @@ python -c "import sys; print(sys.executable)"
 Sanity check:
 
 ```bash
-file /project/project_462000131/anisrahm/venvs/myvenv/bin/python
+file /project/project_462000131/$USER/venvs/myvenv/bin/python
 ```
 
 It should resolve to a real executable/symlink, not a recursive shell wrapper.
