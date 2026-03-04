@@ -36,18 +36,10 @@
   - `artifacts/after_outputs.jsonl`
   - `artifacts/adapters/adapter_demo`
 
-## Presenter support
-
-- Rehearse command order from `docs/DEMO_RUNBOOK.md`.
-- Capture fallback materials:
-  - Multi-GPU `rocm-smi` screenshot(s)
-  - Scaling plot screenshot
-  - Optional 2-3 minute recording
-
 ## Definition of done checklist
 
 - [ ] Environment reproducible from clean allocation using `ENVIRONMENT.md`.
 - [ ] Before/after prompts show clear qualitative improvement.
 - [ ] Live 4-GPU run reaches logging within 30-60s from launch.
 - [ ] Scaling artifacts generated from real LUMI logs (not synthetic).
-- [ ] Fallback ladder validated end-to-end.
+- [ ] Failure handling and troubleshooting steps validated.
