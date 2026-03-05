@@ -1,159 +1,57 @@
-# System Design: Enterprise Assistant + ROCm Multi-GPU Scaling
+# System Design
 
-## 1) Scope and demo contract
+## Goal
 
-This design produces three proof points in one flow:
+Show three things clearly:
 
-1. **Business relevance**: enterprise support/policy assistant prompt set.
-2. **Real distributed execution**: live DDP LoRA fine-tune on LUMI GPUs.
-3. **Measured scaling**: 1 vs 4 vs 8 GPU tokens/s, step time, efficiency.
+1. Distributed LoRA training works on LUMI-G.
+2. Throughput scales from 1 to 4 to 8 GPUs.
+3. Optional before/after inference can show quality change with an adapter.
 
-## 2) Chosen technical stack (exact defaults)
+## Core components
 
-- **Base model (default)**: `Qwen/Qwen2.5-7B-Instruct`
-- **Fallback model**: `Qwen/Qwen2.5-3B-Instruct`
-- **Adapter method**: LoRA (PEFT), train adapters only
-- **Precision**: `bf16`
-- **Distributed**: `torch.distributed` + `DDP`, launcher `torchrun`
-- **Optimizer**: `AdamW`
-- **Scheduler**: cosine with warmup
-- **Sequence length**: `1024` (demo-safe), optional `2048` precompute run
-- **Dataset format**: JSONL with `prompt`/`response` or `messages`
+- `scripts/train_lora_ddp.py`: LoRA training with DDP and JSONL logging.
+- `run-scripts/run_1gpu.sh`, `run_4gpu.sh`, `run_2node_8gpu.sh`: launchers for 1/4/8 GPU runs.
+- `scripts/parse_logs.py`: builds scaling table and plot.
+- `scripts/infer_before_after.py`: compares base model vs base+adapter outputs.
+- `run-scripts/watch_rocm_smi.sh`: lightweight GPU monitoring.
 
-## 3) Runtime architecture
+## Runtime flow
 
 ```mermaid
 flowchart LR
-    A["Prompts JSONL"] --> B["infer_before_after.py"]
-    B --> C["Base model response"]
-    B --> D["Base+LoRA response"]
+    A["Dataset JSONL"] --> B["train_lora_ddp.py"]
+    B --> C["DDP run (1/4/8 GPUs)"]
+    C --> D["logs/train_*.jsonl"]
+    D --> E["parse_logs.py"]
+    E --> F["scaling_summary.md/.csv"]
+    E --> G["scaling_plot.png"]
 
-    E["Dataset JSONL"] --> F["train_lora_ddp.py"]
-    F --> G["DDP workers (1/4/8 GPUs)"]
-    G --> H["adapter_live output"]
-    G --> I["logs/train_*.jsonl"]
-
-    I --> J["parse_logs.py"]
-    J --> K["scaling_summary.csv/.md"]
-    J --> L["scaling_plot.png"]
-
-    M["watch_rocm_smi.sh"] --> N["gpu_util snapshots/logs"]
+    H["prompts/demo_prompts.jsonl"] --> I["infer_before_after.py"]
+    I --> J["before_outputs.jsonl"]
+    I --> K["after_outputs.jsonl"]
 ```
 
-## 4) Repository structure
+## Data format
 
-```text
-configs/
-  model_qwen25_7b.yaml
-  train_lora_demo.yaml
-  train_lora_fallback_3b.yaml
-scripts/
-  infer_before_after.py
-  train_lora_ddp.py
-  parse_logs.py
-run-scripts/
-  run_1gpu.sh
-  run_4gpu.sh
-  run_2node_8gpu.sh
-  watch_rocm_smi.sh
-docs/
-  ENVIRONMENT.md
-  SYSTEM_DESIGN.md
-  DEMO_RUNBOOK.md
-prompts/
-  demo_prompts.jsonl
-data/
-  demo_support_subset.sample.jsonl
-artifacts/
-logs/
-```
-
-## 5) Training design details
-
-### 5.1 Data contract
-
-Each JSONL row is one sample, one of:
+Training rows can be one of:
 
 - `{ "prompt": "...", "response": "..." }`
 - `{ "question": "...", "answer": "..." }`
-- `{ "messages": [{"role": "system|user|assistant", "content": "..."}, ...] }`
+- `{ "messages": [...] }`
 
-The trainer normalizes each row to a chat-style text sequence and computes Causal LM loss.
+## Scaling metrics
 
-### 5.2 LoRA config (default)
-
-- `r=16`
-- `lora_alpha=32`
-- `lora_dropout=0.05`
-- `target_modules=[q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj]`
-- `bias=none`
-- `task_type=CAUSAL_LM`
-
-### 5.3 Optimization config (default)
-
-- `global_batch_size`: 64 tokens-batches effective
-- `micro_batch_size_per_gpu`: 2
-- `gradient_accumulation_steps`: 8 (for 4 GPUs; tune per world size)
-- `max_steps`: 150 live demo, 400 precompute
-- `lr`: `2e-4`
-- `weight_decay`: `0.01`
-- `warmup_steps`: `20`
-- `max_grad_norm`: `1.0`
-- `logging_steps`: `5`
-- `save_steps`: `50`
-
-### 5.4 DDP assumptions
-
-- Backend: `nccl`
-- One process per GPU (`torchrun --nproc_per_node=N`)
-- Rank 0 writes structured JSONL logs
-- `DistributedSampler` for deterministic shard splits
-
-## 6) Inference design details
-
-`infer_before_after.py`:
-
-- Loads base model once per invocation.
-- If `--adapter_path` is set, wraps model with PEFT adapter.
-- Uses fixed generation config to keep output stable:
-  - `temperature=0.2`
-  - `top_p=0.9`
-  - `max_new_tokens=220`
-  - `seed=42`
-- Prints and optionally writes JSONL outputs for replay/fallback.
-
-## 7) Scaling metrics definitions
-
-For each run config, compute average over steady-state steps (skip warmup):
+From steady-state training steps:
 
 - `avg_step_time_s`
 - `avg_tokens_per_s`
-- `speedup = tokens_per_s(world_size=k) / tokens_per_s(world_size=1)`
+- `speedup = tokens_per_s(k) / tokens_per_s(1)`
 - `efficiency = speedup / k`
 
-Output artifacts:
+## Success checks
 
-- `artifacts/scaling_summary.csv`
-- `artifacts/scaling_summary.md`
-- `artifacts/scaling_plot.png`
-
-## 8) Operational defaults for demo reliability
-
-- Pre-cache model on scratch before runs.
-- Keep live run short (150 steps).
-- Prefer 4-GPU single-node live run.
-- Keep 8-GPU numbers precomputed unless network is already rehearsed.
-- Maintain fallback chain: live -> semi-live -> recorded.
-
-## 9) Exact launch matrix
-
-- `run_1gpu.sh`: 1 node x 1 GPU, 80 steps, baseline throughput
-- `run_4gpu.sh`: 1 node x 4 GPUs, 150 steps, main live demo
-- `run_2node_8gpu.sh`: 2 nodes x 4 GPUs/node, 200 steps, precomputed scaling
-
-## 10) Acceptance checks
-
-- Rank 0 log includes `world_size`, `step_time_s`, `tokens_per_s` every 5 steps.
-- `rocm-smi` shows non-zero GPU activity on target GPUs.
-- Prompt outputs clearly differ before/after using `adapter_demo`.
-- Scaling summary shows monotonic throughput improvement from 1 -> 4 -> 8.
+- Logs contain regular `step_time_s` and `tokens_per_s` entries.
+- `rocm-smi` shows active GPUs during run.
+- Scaling summary shows throughput increase from 1 -> 4 -> 8.
+- Optional: before/after outputs differ when adapter is loaded.
